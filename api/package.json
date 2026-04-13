@@ -1,20 +1,27 @@
 {
-  "name": "smart-cart-system",
-  "version": "1.0.0",
+  "name": "smart-cart-api",
   "description": "Smart Cart POS System with IoT Integration",
-  "main": "server.js",
+  "main": "src/index.ts",
+  "type": "module",
   "scripts": {
-    "start": "bun run server.js",
-    "dev": "bun --watch server.js"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --minify",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "db:generate": "bunx drizzle-kit generate",
+    "db:migrate": "bunx drizzle-kit migrate",
+    "db:push": "bunx drizzle-kit push",
+    "db:seed": "bun run src/db/seed.ts"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "mysql2": "^3.6.0",
-    "dotenv": "^16.3.1",
-    "cors": "^2.8.5",
-    "uuid": "^9.0.0"
+    "@hono/zod-validator": "^0.7.6",
+    "@libsql/client": "^0.17.2",
+    "drizzle-orm": "^0.45.2",
+    "drizzle-zod": "^0.8.3",
+    "hono": "^4.12.12",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "drizzle-kit": "^0.31.10",
+    "wrangler": "^4.4.0"
   }
 }

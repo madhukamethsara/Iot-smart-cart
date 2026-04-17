@@ -5,7 +5,6 @@ import { DrizzleQueryError, eq } from 'drizzle-orm';
 import * as z from 'zod'
 import { zValidator } from '@/lib/validator';
 import { db } from '@/middleware/db.middleware';
-import { LibsqlError } from '@libsql/client';
 
 const app = new Hono<AppEnv>()
 

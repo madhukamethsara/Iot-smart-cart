@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "my-app",
+  "name": "iot-smart-cart",
   "main": "src/index.ts",
   "compatibility_date": "2026-04-10"
   // "compatibility_flags": [

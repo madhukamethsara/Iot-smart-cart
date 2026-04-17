@@ -4,11 +4,12 @@ import { logger } from "hono/logger";
 import products from "./routes/products"
 import checkout from "./routes/checkout"
 import carts from "./routes/carts"
-import users from "./routes/products"
+import users from "./routes/users"
 import { AppEnv } from "./types/app.env";
 import { dbMiddleWare } from "./middleware/db.middleware";
+import { HTTPException } from "hono/http-exception";
 
-const app = new Hono<AppEnv>().basePath('/api')
+const app = new Hono<AppEnv>({ strict: false }).basePath('/api')
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(logger())
@@ -33,8 +34,12 @@ app.notFound((c) => {
 
 // ─── Global error handler ─────────────────────────────────────────────────────
 app.onError((err, c) => {
-  return c.json({ success: false, message: `Internal server error: ${err.message}` }, 500);
-});
+  if (err instanceof HTTPException) {
+    return c.json({ success: false, message: err.message }, err.status)
+  }
+  console.log(err)
+  return c.json({ success: false, message: 'Internal server error' }, 500)
+})
 
 // app.listen(PORT, () => {
 //   console.log(`\n🚀 Smart Cart Server running at http://localhost:${PORT}`);

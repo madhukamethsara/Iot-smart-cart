@@ -1,5 +1,5 @@
 import { AppEnv } from "@/types/app.env";
-import { drizzle } from 'drizzle-orm/libsql'
+import { drizzle } from 'drizzle-orm/libsql/web'
 import { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 

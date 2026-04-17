@@ -80,7 +80,7 @@ app.post('/',
       const rows = await tx
         .select({ count: count() })
         .from(billsTable)
-        .where(eq(sql`YEAR(${billsTable.createdAt})`, year))
+        .where(eq(sql`strftime('%Y', ${billsTable.createdAt})`, String(year)))
 
       const cn = rows[0].count + 1
       const billNumber = `BILL-${year}-${String(cn).padStart(4, '0')}`
@@ -92,7 +92,7 @@ app.post('/',
           billNumber,
           cartId: data.cartId,
           cashierId: data.cashierId,
-          totalAmount: total.toFixed(2),
+          totalAmount: total,
           paymentMethod: data.paymentMethod
         })
 
@@ -101,16 +101,15 @@ app.post('/',
 
       const billItemData = z.array(billItemsInsertSchema)
         .parse(
-          items.map(item => [
+          items.map(item => ({
             billId,
-            item.productId,
-            item.name,
-            item.barcode,
-            item.price,
-            item.quantity,
-            item.weight,
-            item.price * item.quantity,
-          ]))
+            productId: item.productId,
+            productName: item.name,
+            productBarcode: item.barcode,
+            unitPrice: item.price,
+            quantity: item.quantity,
+            subtotal: item.price * item.quantity,
+          })))
 
       await tx.insert(billItemsTable)
         .values(billItemData)
@@ -137,12 +136,12 @@ app.post('/',
 // Get all bills (admin/cashier report)
 app.get('/bills',
   zValidator('query', z.object({
-    limit: z.number().int().positive().default(50),
-    offset: z.number().int().positive().default(0)
+    limit: z.coerce.number().int().positive().default(50),
+    offset: z.coerce.number().int().default(0)
   })),
   async (c) => {
     const { limit, offset } = c.req.valid('query')
-    const [bills] = await db(c).select()
+    const bills = await db(c).select()
       .from(billsTable)
       .limit(limit)
       .offset(offset)
@@ -152,15 +151,17 @@ app.get('/bills',
 
 // Get specific bill by bill number
 app.get('/bill/:bill_number',
-  zValidator('param', z.string().min(1)),
+  zValidator('param', z.object({
+    bill_number: z.string().min(1)
+  })),
   async (c) => {
-    const billNumber = c.req.valid('param')
+    const { bill_number: billNumber } = c.req.valid('param')
     const [bill] = await db(c)
       .select().from(billsTable)
       .where(eq(billsTable.billNumber, billNumber))
 
     if (!bill) return c.json({ success: false, message: 'Bill not found' }, 404)
-    return c.json({ success: true, data: bill }, 404)
+    return c.json({ success: true, data: bill })
   });
 
 export default app;

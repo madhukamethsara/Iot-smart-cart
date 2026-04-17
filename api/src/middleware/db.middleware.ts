@@ -11,7 +11,7 @@ export const dbMiddleWare = createMiddleware<AppEnv>(async (c, next) => {
   const db = drizzle({
     connection: {
       url: c.env.TURSO_CONNECTION_URL,
-      authToken: c.env.TURSO_CONNECTION_URL
+      authToken: c.env.TURSO_AUTH_TOKEN
     }
   })
   c.set('db', db)

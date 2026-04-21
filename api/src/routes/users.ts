@@ -5,14 +5,16 @@ import { zValidator } from '@/lib/validator';
 import z from 'zod';
 import { eq } from 'drizzle-orm';
 import { db } from '@/middleware/db.middleware';
+import { requireAuth, requireRole } from '@/middleware/auth.middleware';
 
 const app = new Hono<AppEnv>()
+
+app.use('/*', requireAuth, requireRole('admin'))
 
 app.get('/', async (c) => {
   const users = await db(c).select({
     id: usersTable.id,
     name: usersTable.name,
-    email: usersTable.email,
     role: usersTable.role,
     createdAt: usersTable.createdAt
   }).from(usersTable)

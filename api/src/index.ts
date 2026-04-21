@@ -4,6 +4,7 @@ import products from "./routes/products";
 import checkout from "./routes/checkout";
 import carts from "./routes/carts";
 import users from "./routes/users";
+import auth from "./routes/auth";
 import { AppEnv } from "./types/app.env";
 import { dbMiddleWare } from "./middleware/db.middleware";
 import { HTTPException } from "hono/http-exception";
@@ -19,6 +20,7 @@ app.route('/products', products);
 app.route('/cart', carts);
 app.route('/checkout', checkout);
 app.route('/users', users);
+app.route('/auth', auth);
 
 app.get('/health', (c) => {
   return c.json({

@@ -13,9 +13,8 @@ async function seed() {
   console.log('Seeding...');
 
   await db.insert(usersTable).values([
-    { name: 'Admin User', email: 'admin@smartcart.com', password: 'hashed_password_here', role: 'admin' },
-    { name: 'John Cashier', email: 'cashier@smartcart.com', password: 'hashed_password_here', role: 'cashier' },
-    { name: 'Jane Adder', email: 'adder@smartcart.com', password: 'hashed_password_here', role: 'product_adder' },
+    { name: 'Admin User', password: 'hashed_password_here', role: 'admin' },
+    { name: 'John Cashier', password: 'hashed_password_here', role: 'cashier' },
   ]);
 
   await db.insert(productsTable).values([

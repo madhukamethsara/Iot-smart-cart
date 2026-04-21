@@ -12,8 +12,11 @@ import { Hono } from 'hono'
 import { db } from '@/middleware/db.middleware'
 import { and, count, eq, gte, sql } from 'drizzle-orm'
 import z from 'zod'
+import { requireAuth, requireRole } from '@/middleware/auth.middleware'
 
 const app = new Hono<AppEnv>()
+
+app.use('/*', requireAuth, requireRole('admin', 'cashier'))
 
 const insertSchema = billInsertSchema.pick({
   cartId: true,

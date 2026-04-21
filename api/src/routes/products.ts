@@ -5,6 +5,7 @@ import { DrizzleQueryError, eq } from 'drizzle-orm';
 import * as z from 'zod'
 import { zValidator } from '@/lib/validator';
 import { db } from '@/middleware/db.middleware';
+import { requireAuth, requireRole } from '@/middleware/auth.middleware';
 
 const app = new Hono<AppEnv>()
 
@@ -42,7 +43,7 @@ app.get('/barcode/:barcode',
 
 
 // POST /api/products
-app.post('/', zValidator('json', productInsertSchema), async (c) => {
+app.post('/', requireAuth, requireRole('admin'), zValidator('json', productInsertSchema), async (c) => {
   const data = c.req.valid('json')
 
   try {
@@ -59,6 +60,8 @@ app.post('/', zValidator('json', productInsertSchema), async (c) => {
 
 // PUT /api/products/:id
 app.put('/:id',
+  requireAuth,
+  requireRole('admin'),
   zValidator('param', z.object({
     id: z.coerce.number().int().positive()
   })),
@@ -76,6 +79,8 @@ app.put('/:id',
 
 // DELETE /api/products/:id
 app.delete('/:id',
+  requireAuth,
+  requireRole('admin'),
   zValidator('param', z.object({
     id: z.coerce.number().int().positive()
   })),

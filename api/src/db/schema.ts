@@ -4,10 +4,9 @@ import { createInsertSchema, createUpdateSchema } from 'drizzle-zod'
 
 export const usersTable = sqliteTable('users', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  name: text('name').notNull(),
-  email: text('email').notNull().unique(),
+  name: text('name').notNull().unique(),
   password: text('password').notNull(),
-  role: text('role', { enum: ['admin', 'cashier', 'product_adder'] }).notNull(),
+  role: text('role', { enum: ['admin', 'cashier'] }).notNull(),
   createdAt: text('created_at').default(sql`(current_timestamp)`),
 });
 

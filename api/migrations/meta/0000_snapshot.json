@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8808f7a2-de2e-4a25-a94f-8441c6d708be",
+  "id": "844ac8dc-f916-472a-853c-ca71dd2a5ea5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "bill_items": {
@@ -453,13 +453,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "email": {
-          "name": "email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "password": {
           "name": "password",
           "type": "text",
@@ -484,10 +477,10 @@
         }
       },
       "indexes": {
-        "users_email_unique": {
-          "name": "users_email_unique",
+        "users_name_unique": {
+          "name": "users_name_unique",
           "columns": [
-            "email"
+            "name"
           ],
           "isUnique": true
         }

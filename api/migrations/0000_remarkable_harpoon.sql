@@ -63,10 +63,9 @@ CREATE UNIQUE INDEX `products_barcode_unique` ON `products` (`barcode`);--> stat
 CREATE TABLE `users` (
 	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
 	`name` text NOT NULL,
-	`email` text NOT NULL,
 	`password` text NOT NULL,
 	`role` text NOT NULL,
 	`created_at` text DEFAULT (current_timestamp)
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `users_email_unique` ON `users` (`email`);
+CREATE UNIQUE INDEX `users_name_unique` ON `users` (`name`);

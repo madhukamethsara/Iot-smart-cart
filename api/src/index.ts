@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { logger } from "hono/logger";
 import products from "./routes/products";
 import checkout from "./routes/checkout";
 import carts from "./routes/carts";
@@ -12,7 +11,6 @@ import { HTTPException } from "hono/http-exception";
 const app = new Hono<AppEnv>({ strict: false }).basePath('/api');
 
 
-app.use(logger());
 app.use(cors());
 app.use(dbMiddleWare);
 

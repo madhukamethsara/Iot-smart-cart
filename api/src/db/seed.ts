@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client';
 import { drizzle } from 'drizzle-orm/libsql';
-import { cartItemsTable, cartsTable, productsTable, usersTable } from './schema';
+import { cartItemsTable, cartsTable, productsTable } from './schema';
 
 const client = createClient({
   url: process.env.TURSO_CONNECTION_URL!,
@@ -11,11 +11,6 @@ const db = drizzle(client);
 
 async function seed() {
   console.log('Seeding...');
-
-  await db.insert(usersTable).values([
-    { name: 'Admin User', password: 'hashed_password_here', role: 'admin' },
-    { name: 'John Cashier', password: 'hashed_password_here', role: 'cashier' },
-  ]);
 
   await db.insert(productsTable).values([
     { name: "Lay's Classic Chips", barcode: '4890008100309', price: 2.00, stock: 75, category: 'Snacks' },

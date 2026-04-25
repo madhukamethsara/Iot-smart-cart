@@ -15,6 +15,7 @@ const app = new Hono<AppEnv>()
 
 const cartScanSchema = z.object({
   barcode: z.string().min(1, 'Barcode is required'),
+  quantity: z.coerce.number().positive('Quantity must be a number').default(1),
   measuredWeight: z.coerce.number().positive('Measured weight is required'),
 })
 
@@ -239,7 +240,7 @@ app.post(
   zValidator('json', cartScanSchema),
   async (c) => {
     const { cart_id: cartId } = c.req.valid('param')
-    const { barcode, measuredWeight } = c.req.valid('json')
+    const { barcode, quantity, measuredWeight } = c.req.valid('json')
 
     const [cart] = await db(c)
       .select()
@@ -305,7 +306,7 @@ app.post(
     if (existingItem) {
       await db(c)
         .update(cartItemsTable)
-        .set({ quantity: existingItem.quantity + 1 })
+        .set({ quantity: existingItem.quantity + quantity })
         .where(eq(cartItemsTable.id, existingItem.id))
     } else {
       await db(c)
@@ -313,7 +314,7 @@ app.post(
         .values({
           cartId,
           productId: product.id,
-          quantity: 1,
+          quantity,
         })
     }
 

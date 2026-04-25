@@ -133,7 +133,11 @@ app.get(
       0
     )
 
-    return c.json({
+    const env = c.env
+    const id = env.CartHubDO.idFromName('global')
+    const stub = env.CartHubDO.get(id)
+
+    const payload = {
       success: true,
       data: {
         cart,
@@ -141,9 +145,30 @@ app.get(
         total,
         expectedWeight,
       },
-    })
+    }
+
+    await stub.fetch(new Request(
+      new URL('/publish', c.req.url), {
+      method: 'POST',
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }))
+
+    return c.json(payload)
   }
 )
+
+
+app.get('/latest', async (c) => {
+  const env = c.env
+  const id = env.CartHubDO.idFromName('global')
+  const stub = env.CartHubDO.get(id)
+
+  return stub.fetch(new Request(
+    new URL('/ws', c.req.url), { headers: c.req.raw.headers }
+  ))
+})
+
 
 // Cart items
 app.get(

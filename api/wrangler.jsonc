@@ -2,7 +2,23 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "iot-smart-cart",
   "main": "src/index.ts",
-  "compatibility_date": "2026-04-10"
+  "compatibility_date": "2026-04-10",
+  "migrations": [
+    {
+      "new_classes": ["CartHubDO"],
+      "tag": "v1"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{
+      "class_name": "CartHubDO",
+      "name": "CartHubDO"
+    }]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
   // "compatibility_flags": [
   //   "nodejs_compat"
   // ],
@@ -31,8 +47,4 @@
   // "ai": {
   //   "binding": "AI"
   // },
-  // "observability": {
-  //   "enabled": true,
-  //   "head_sampling_rate": 1
-  // }
 }

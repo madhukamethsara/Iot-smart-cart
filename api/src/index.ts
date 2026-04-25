@@ -8,6 +8,7 @@ import auth from "./routes/auth";
 import { AppEnv } from "./types/app.env";
 import { dbMiddleWare } from "./middleware/db.middleware";
 import { HTTPException } from "hono/http-exception";
+export { CartHubDO } from '@/durable/cart-do'
 
 const app = new Hono<AppEnv>({ strict: false }).basePath('/api');
 

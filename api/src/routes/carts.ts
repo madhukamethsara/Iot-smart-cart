@@ -251,6 +251,20 @@ app.post(
       return c.json({ success: false, message: 'Cart not found' }, 404)
     }
 
+    if (cart.status !== 'active') {
+      const [result] = await db(c)
+        .update(cartsTable)
+        .set({ status: 'active' })
+        .where(eq(cartsTable.id, cartId))
+        .returning()
+
+      console.log('cart status updated', result)
+
+      if (!result) {
+        return c.json({ success: false, message: 'Cannot activate cart' }, 404)
+      }
+    }
+
     const [product] = await db(c)
       .select()
       .from(productsTable)

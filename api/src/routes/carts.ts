@@ -17,6 +17,7 @@ const cartScanSchema = z.object({
   barcode: z.string().min(1, 'Barcode is required'),
   quantity: z.coerce.number().positive('Quantity must be a number').default(1),
   measuredWeight: z.coerce.number().positive('Measured weight is required'),
+  delete: z.boolean().default(false)
 })
 
 // Admin: list all carts
@@ -240,7 +241,7 @@ app.post(
   zValidator('json', cartScanSchema),
   async (c) => {
     const { cart_id: cartId } = c.req.valid('param')
-    const { barcode, quantity, measuredWeight } = c.req.valid('json')
+    const { barcode, quantity, measuredWeight, delete: isDelete } = c.req.valid('json')
 
     const [cart] = await db(c)
       .select()
@@ -257,8 +258,6 @@ app.post(
         .set({ status: 'active' })
         .where(eq(cartsTable.id, cartId))
         .returning()
-
-      console.log('cart status updated', result)
 
       if (!result) {
         return c.json({ success: false, message: 'Cannot activate cart' }, 404)
@@ -317,11 +316,44 @@ app.post(
         )
       )
 
+    console.log(isDelete)
+
     if (existingItem) {
-      await db(c)
-        .update(cartItemsTable)
-        .set({ quantity: existingItem.quantity + quantity })
-        .where(eq(cartItemsTable.id, existingItem.id))
+      let isReduced = false
+
+      if (isDelete) {
+        if (existingItem.quantity > 1) {
+          await db(c)
+            .update(cartItemsTable)
+            .set({ quantity: existingItem.quantity - quantity })
+            .where(eq(cartItemsTable.id, existingItem.id))
+
+          isReduced = true
+        } else {
+          const [result] = await db(c)
+            .delete(cartItemsTable)
+            .where(eq(cartItemsTable.productId, product.id))
+            .returning()
+
+          if (!result) {
+            return c.json({
+              success: false,
+              message: `Failed to delete item: ${product.name}`
+            })
+          } else {
+            return c.json({
+              success: true,
+              message: `Item ${product.name} deleted`
+            })
+          }
+        }
+      }
+
+      (isReduced) ||
+        await db(c)
+          .update(cartItemsTable)
+          .set({ quantity: existingItem.quantity + quantity })
+          .where(eq(cartItemsTable.id, existingItem.id))
     } else {
       await db(c)
         .insert(cartItemsTable)

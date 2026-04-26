@@ -117,7 +117,7 @@ app.post('/',
       await tx.insert(billItemsTable)
         .values(billItemData)
 
-      await tx.delete(cartItemsTable).where(eq(cartItemsTable.id, data.cartId))
+      await tx.delete(cartItemsTable).where(eq(cartItemsTable.cartId, data.cartId))
 
       await tx.update(cartsTable)
         .set({ status: 'available' })

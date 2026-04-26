@@ -31,98 +31,109 @@ app.post('/',
     const data = c.req.valid('json')
     let billId: number | undefined
 
-    await db(c).transaction(async (tx) => {
-      const [cart] = await tx.select().from(cartsTable).where(eq(cartsTable.id, data.cartId!))
+    try {
+      await db(c).transaction(async (tx) => {
+        const [cart] = await tx.select().from(cartsTable).where(eq(cartsTable.id, data.cartId!))
 
-      if (!cart) return c.json({ success: false, mesasge: 'Cart not found' }, 404)
-      if (cart.status !== 'active') {
-        return c.json({ success: false, message: 'Cart is not active, cannot checkout' }, 400)
-      }
+        if (!cart) return c.json({ success: false, mesasge: 'Cart not found' }, 404)
+        if (cart.status !== 'active') {
+          throw new Error('CART_NOT_ACTIVE')
+        }
 
-      const items = await db(c)
-        .select({
-          id: cartItemsTable.id,
-          cartId: cartItemsTable.cartId,
-          quantity: cartItemsTable.quantity,
-          addedAt: cartItemsTable.addedAt,
-          productId: productsTable.id,
-          name: productsTable.name,
-          barcode: productsTable.barcode,
-          price: productsTable.price,
-          weight: productsTable.weight,
-          stock: productsTable.stock,
-          category: productsTable.category,
-        })
-        .from(cartItemsTable)
-        .innerJoin(productsTable, eq(cartItemsTable.productId, productsTable.id))
-        .where(eq(cartItemsTable.cartId, cart.id))
+        const items = await db(c)
+          .select({
+            id: cartItemsTable.id,
+            cartId: cartItemsTable.cartId,
+            quantity: cartItemsTable.quantity,
+            addedAt: cartItemsTable.addedAt,
+            productId: productsTable.id,
+            name: productsTable.name,
+            barcode: productsTable.barcode,
+            price: productsTable.price,
+            weight: productsTable.weight,
+            stock: productsTable.stock,
+            category: productsTable.category,
+          })
+          .from(cartItemsTable)
+          .innerJoin(productsTable, eq(cartItemsTable.productId, productsTable.id))
+          .where(eq(cartItemsTable.cartId, cart.id))
 
-      if (items.length === 0) {
-        return c.json({ success: false, message: 'Cart is empty' }, 400)
-      }
+        if (items.length === 0) {
+          return c.json({ success: false, message: 'Cart is empty' }, 400)
+        }
 
-      await Promise.all(items.map(async item => {
-        const [updatedProduct] = await tx.update(productsTable)
-          .set({ stock: sql`${item.stock} - ${item.quantity}` })
-          .where(
-            and(
-              eq(productsTable.id, item.productId), gte(productsTable.stock, item.quantity)
-            )).returning()
-        if (!updatedProduct) {
-          tx.rollback()
+        await Promise.all(items.map(async item => {
+          const [updatedProduct] = await tx.update(productsTable)
+            .set({ stock: sql`${item.stock} - ${item.quantity}` })
+            .where(
+              and(
+                eq(productsTable.id, item.productId), gte(productsTable.stock, item.quantity)
+              )).returning()
+          if (!updatedProduct) {
+            tx.rollback()
+            throw new Error(`INSUFFICIENT_STOCK: ${item.name} ${item.quantity} requested`)
+          }
+
+        }))
+
+        const year = new Date().getFullYear();
+        const rows = await tx
+          .select({ count: count() })
+          .from(billsTable)
+          .where(eq(sql`strftime('%Y', ${billsTable.createdAt})`, String(year)))
+
+        const cn = rows[0].count + 1
+        const billNumber = `BILL-${year}-${String(cn).padStart(4, '0')}`
+
+        const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+        const billData = billInsertSchema
+          .parse({
+            billNumber,
+            cartId: data.cartId,
+            cashierId: data.cashierId,
+            totalAmount: total,
+            paymentMethod: data.paymentMethod
+          })
+
+        const [bill] = await tx.insert(billsTable).values(billData).returning()
+        billId = bill.id
+
+        const billItemData = z.array(billItemsInsertSchema)
+          .parse(
+            items.map(item => ({
+              billId,
+              productId: item.productId,
+              productName: item.name,
+              productBarcode: item.barcode,
+              unitPrice: item.price,
+              quantity: item.quantity,
+              subtotal: item.price * item.quantity,
+            })))
+
+        await tx.insert(billItemsTable)
+          .values(billItemData)
+
+        await tx.delete(cartItemsTable).where(eq(cartItemsTable.cartId, data.cartId))
+
+        await tx.update(cartsTable)
+          .set({ status: 'available' })
+          .where(eq(cartsTable.id, data.cartId))
+      })
+    } catch (e) {
+      if (e instanceof Error) {
+        if (e.message.includes('CART_NOT_ACTIVE')) {
+          return c.json({ success: false, message: 'Cart is not active, cannot checkout' }, 400)
+        }
+
+        if (e.message.includes('INSUFFICIENT_STOCK'))
           return c.json(
             {
               success: false,
-              message: `Insufficient stock for ${item.name} (requested: ${item.quantity})`
+              message: `Insufficient stock for ${e.message.split(':')[1]}`
             }, 400)
-        }
-
-      }))
-
-      const year = new Date().getFullYear();
-      const rows = await tx
-        .select({ count: count() })
-        .from(billsTable)
-        .where(eq(sql`strftime('%Y', ${billsTable.createdAt})`, String(year)))
-
-      const cn = rows[0].count + 1
-      const billNumber = `BILL-${year}-${String(cn).padStart(4, '0')}`
-
-      const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-
-      const billData = billInsertSchema
-        .parse({
-          billNumber,
-          cartId: data.cartId,
-          cashierId: data.cashierId,
-          totalAmount: total,
-          paymentMethod: data.paymentMethod
-        })
-
-      const [bill] = await tx.insert(billsTable).values(billData).returning()
-      billId = bill.id
-
-      const billItemData = z.array(billItemsInsertSchema)
-        .parse(
-          items.map(item => ({
-            billId,
-            productId: item.productId,
-            productName: item.name,
-            productBarcode: item.barcode,
-            unitPrice: item.price,
-            quantity: item.quantity,
-            subtotal: item.price * item.quantity,
-          })))
-
-      await tx.insert(billItemsTable)
-        .values(billItemData)
-
-      await tx.delete(cartItemsTable).where(eq(cartItemsTable.cartId, data.cartId))
-
-      await tx.update(cartsTable)
-        .set({ status: 'available' })
-        .where(eq(cartsTable.id, data.cartId))
-    })
+      }
+    }
 
     if (!billId) {
       return c.json({ success: false, message: 'Checkout failed' }, 500)

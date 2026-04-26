@@ -1,5 +1,6 @@
 import { usersTable } from '@/db/schema'
 import { zValidator } from '@/lib/validator'
+import { requireAuth } from '@/middleware/auth.middleware'
 import { db } from '@/middleware/db.middleware'
 import { AppEnv } from '@/types/app.env'
 import { eq, sql } from 'drizzle-orm'
@@ -182,6 +183,30 @@ app.post('/admin/create', zValidator('json', authPayloadSchema), async (c) => {
     },
     201
   )
+})
+
+app.get('/me', requireAuth, async (c) => {
+  const { id } = c.get('authUser')
+
+  const [user] = await db(c)
+    .select({
+      id: usersTable.id,
+      name: usersTable.name,
+      role: usersTable.role,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, id))
+
+  if (!user || (user.role !== 'admin' && user.role !== 'cashier')) {
+    return c.json({ success: false, message: 'Invalid or expired session' }, 401)
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      user,
+    },
+  })
 })
 
 export default app

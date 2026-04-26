@@ -136,7 +136,7 @@ app.get(
     )
 
     const env = c.env
-    const id = env.CartHubDO.idFromName('global')
+    const id = env.CartHubDO.idFromName('cartScan')
     const stub = env.CartHubDO.get(id)
 
     const payload = {
@@ -163,13 +163,43 @@ app.get(
 
 app.get('/latest', async (c) => {
   const env = c.env
-  const id = env.CartHubDO.idFromName('global')
+  const id = env.CartHubDO.idFromName('cartScan')
   const stub = env.CartHubDO.get(id)
 
   return stub.fetch(new Request(
     new URL('/ws', c.req.url), { headers: c.req.raw.headers }
   ))
 })
+
+app.get(
+  '/:cart_id/items/latest',
+  zValidator(
+    'param',
+    z.object({
+      cart_id: z.coerce.number().int().positive(),
+    })
+  ),
+  async (c) => {
+    const { cart_id: cartId } = c.req.valid('param')
+
+    const [cart] = await db(c)
+      .select({ id: cartsTable.id })
+      .from(cartsTable)
+      .where(eq(cartsTable.id, cartId))
+
+    if (!cart) {
+      return c.json({ success: false, message: 'Cart not found' }, 404)
+    }
+
+    const env = c.env
+    const id = env.CartHubDO.idFromName('cartScan')
+    const stub = env.CartHubDO.get(id)
+
+    return stub.fetch(new Request(
+      new URL(`/ws/${cartId}`, c.req.url), { headers: c.req.raw.headers }
+    ))
+  }
+)
 
 
 // Cart items
@@ -242,6 +272,8 @@ app.post(
   async (c) => {
     const { cart_id: cartId } = c.req.valid('param')
     const { barcode, quantity, measuredWeight, delete: isDelete } = c.req.valid('json')
+    let operationMessage = 'added to cart'
+    let lcdMessage = 'OK'
 
     const [cart] = await db(c)
       .select()
@@ -316,10 +348,9 @@ app.post(
         )
       )
 
-    console.log(isDelete)
-
     if (existingItem) {
       let isReduced = false
+      let isDeleted = false
 
       if (isDelete) {
         if (existingItem.quantity > 1) {
@@ -329,10 +360,17 @@ app.post(
             .where(eq(cartItemsTable.id, existingItem.id))
 
           isReduced = true
+          operationMessage = 'removed from cart'
+          lcdMessage = 'Removed'
         } else {
           const [result] = await db(c)
             .delete(cartItemsTable)
-            .where(eq(cartItemsTable.productId, product.id))
+            .where(
+              and(
+                eq(cartItemsTable.cartId, cartId),
+                eq(cartItemsTable.productId, product.id)
+              )
+            )
             .returning()
 
           if (!result) {
@@ -340,16 +378,15 @@ app.post(
               success: false,
               message: `Failed to delete item: ${product.name}`
             })
-          } else {
-            return c.json({
-              success: true,
-              message: `Item ${product.name} deleted`
-            })
           }
+
+          isDeleted = true
+          operationMessage = 'deleted from cart'
+          lcdMessage = 'Deleted'
         }
       }
 
-      (isReduced) ||
+      (isReduced || isDeleted) ||
         await db(c)
           .update(cartItemsTable)
           .set({ quantity: existingItem.quantity + quantity })
@@ -388,10 +425,10 @@ app.post(
       0
     )
 
-    return c.json({
+    const responsePayload = {
       success: true,
-      message: `${product.name} added to cart`,
-      lcdMessage: `${product.name} OK`,
+      message: `${product.name} ${operationMessage}`,
+      lcdMessage: `${product.name} ${lcdMessage}`,
       data: {
         cartId,
         scannedProduct: {
@@ -406,7 +443,24 @@ app.post(
         total,
         expectedWeight,
       },
-    })
+    }
+
+    const env = c.env
+    const id = env.CartHubDO.idFromName('cartScan')
+    const stub = env.CartHubDO.get(id)
+
+    try {
+      await stub.fetch(new Request(
+        new URL(`/publish/${cartId}`, c.req.url), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(responsePayload),
+      }))
+    } catch (error) {
+      console.error('Failed to publish cart items latest update', error)
+    }
+
+    return c.json(responsePayload)
   }
 )
 // Update item quantity

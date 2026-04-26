@@ -3,9 +3,9 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
-const char* ssid = "Madhuka iPhone"; 
-const char* password = "madhuka123"; 
-const char* serverUrl = "http://172.20.10.4:8787";
+const char* ssid = ""; 
+const char* password = ""; 
+const char* serverUrl = "";
 
 #define SS_PIN 21
 #define RST_PIN 22

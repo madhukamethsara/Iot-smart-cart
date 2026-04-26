@@ -7,11 +7,11 @@
 
 // ================= WIFI =================
 const char* WIFI_SSID = "Dialog 4G 889";
-const char* WIFI_PASSWORD = "77A4C2e3";
+const char* WIFI_PASSWORD = "";
 
 // ================= BACKEND =================
 // Your PC LAN IP address
-const char* SERVER_BASE_URL = "http://192.168.8.163:8787";
+const char* SERVER_BASE_URL = "";
 const int CART_ID = 2;
 
 // ================= GM65 Barcode Scanner =================

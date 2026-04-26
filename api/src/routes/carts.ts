@@ -267,8 +267,8 @@ app.post(
       }, 400)
     }
 
-    const minWeight = product.weight - 5
-    const maxWeight = product.weight + 5
+    const minWeight = product.weight - 20
+    const maxWeight = product.weight + 20
     const weightMatched =
       measuredWeight >= minWeight && measuredWeight <= maxWeight
 

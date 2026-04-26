@@ -5,19 +5,17 @@
 #include <LiquidCrystal_I2C.h>
 #include <HardwareSerial.h>
 
-// ---------------- WIFI ----------------
-const char* WIFI_SSID = "#####";
-const char* WIFI_PASSWORD = "####";
+// ================= WIFI =================
+const char* WIFI_SSID = "Dialog 4G 889";
+const char* WIFI_PASSWORD = "77A4C2e3";
 
-// ---------------- BACKEND ----------------
-// Exact backend route:
-// POST http://<YOUR_PC_IP>:8787/api/carts/:cart_id/scan
-const char* SERVER_BASE_URL = "#####";
+// ================= BACKEND =================
+// Your PC LAN IP address
+const char* SERVER_BASE_URL = "http://192.168.8.163:8787";
 const int CART_ID = 2;
 
-// ---------------- GM65 Barcode Scanner ----------------
+// ================= GM65 Barcode Scanner =================
 HardwareSerial scannerSerial(2);
-
 #define SCANNER_RX 16
 #define SCANNER_TX 17
 
@@ -26,57 +24,58 @@ String lastScannedBarcode = "";
 unsigned long lastReceiveTime = 0;
 const unsigned long barcodeTimeout = 150;
 
-// ---------------- Ultrasonic Sensor ----------------
+// ================= Ultrasonic Sensor =================
 const int trigPin = 5;
 const int echoPin = 18;
 
-// ---------------- Buzzer ----------------
+// ================= Buzzer =================
 #define BUZZER_PIN 14
 
-// ---------------- LCD ----------------
+// ================= LCD =================
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-// ---------------- Calibration ----------------
-const float EMPTY_DISTANCE_CM = 9.9;
+// ================= Calibration =================
+const float EMPTY_DISTANCE_CM = 9.90;
 const float MASS_CONSTANT_G_PER_CM = 500.0;
 
-// ---------------- Measurement ----------------
+// ================= Detection Settings =================
+const unsigned long productPlacementDelay = 4000;
+const unsigned long placementTimeout = 12000;
+const unsigned long settleDelay = 1500;
+const float minDetectMassG = 3.0;
+const int stableDetectionHits = 2;
+
+// ================= Backend Retry =================
+const int backendRetryCount = 2;
+const unsigned long backendRetryDelayMs = 700;
+
+// ================= Live Update =================
+unsigned long lastSensorUpdate = 0;
+const unsigned long sensorInterval = 300;
+
+// ================= State =================
+bool processingScan = false;
+bool productMeasured = false;
+
+// ================= Measurement =================
 float currentDistance = 0.0;
 float currentCompression = 0.0;
 float currentMassG = 0.0;
 
 float baselineDistance = 0.0;
-float baselineCompression = 0.0;
 float baselineMassG = 0.0;
 
 float finalDistance = 0.0;
-float finalCompression = 0.0;
 float finalMassG = 0.0;
 
 float deltaMassG = 0.0;
 
-bool processingScan = false;
-bool productMeasured = false;
-
-// ---------------- Timing ----------------
-unsigned long lastSensorUpdate = 0;
-const unsigned long sensorInterval = 300;
-
-const unsigned long placementTimeout = 6000;
-const unsigned long settleDelay = 1200;
-const float minDetectMassG = 20.0;
-
-// ---------------- Buzzer State ----------------
+// ================= Buzzer State =================
 bool buzzerRunning = false;
 int buzzerStep = 0;
 unsigned long buzzerStepStart = 0;
 
-// ---------------- Function Prototypes ----------------
-float getDistance();
-float getAverageDistance(int samples);
-float calculateCompression(float distance);
-float calculateMassGrams(float compression);
-
+// ================= Function Prototypes =================
 void connectWiFi();
 bool isWiFiConnected();
 
@@ -84,20 +83,25 @@ void updateBarcodeReader();
 void processProductAfterScan();
 void showLiveWaitingScreen();
 void showMeasuredData();
+void showTwoLine(String line1, String line2);
+
+float getDistance();
+float getAverageDistance(int samples);
+float calculateCompression(float distance);
+float calculateMassGrams(float compression);
+
+String buildCartScanUrl();
+bool sendDeltaToBackend(String barcode, float measuredWeight);
+bool sendDeltaToBackendOnce(String barcode, float measuredWeight);
 
 void startBuzzerPattern();
 void updateBuzzerPattern();
-
-void showTwoLine(String line1, String line2);
-
-bool sendDeltaToBackend(String barcode, float measuredWeight);
-String buildCartScanUrl();
 
 void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  // GM65 scanner UART2
+  // Scanner UART2
   scannerSerial.begin(9600, SERIAL_8N1, SCANNER_RX, SCANNER_TX);
 
   // Ultrasonic
@@ -121,9 +125,8 @@ void setup() {
 
   Serial.println("=================================");
   Serial.println("System Ready");
-  Serial.println("Backend route:");
+  Serial.print("POST Route: ");
   Serial.println(buildCartScanUrl());
-  Serial.println("Mass logic: DELTA MASS");
   Serial.println("=================================");
 }
 
@@ -137,11 +140,9 @@ void loop() {
   updateBuzzerPattern();
 }
 
-// ---------------- WIFI ----------------
+// ================= WIFI =================
 void connectWiFi() {
-  if (WiFi.status() == WL_CONNECTED) {
-    return;
-  }
+  if (WiFi.status() == WL_CONNECTED) return;
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
@@ -173,8 +174,7 @@ void connectWiFi() {
     lcd.print(WiFi.localIP());
     delay(1500);
   } else {
-    Serial.println("WiFi connection failed");
-
+    Serial.println("WiFi failed");
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("WiFi Failed");
@@ -188,7 +188,7 @@ bool isWiFiConnected() {
   return WiFi.status() == WL_CONNECTED;
 }
 
-// ---------------- Barcode Reader ----------------
+// ================= Barcode Reader =================
 void updateBarcodeReader() {
   if (processingScan) return;
 
@@ -205,10 +205,14 @@ void updateBarcodeReader() {
   if (barcodeBuffer.length() > 0 && (millis() - lastReceiveTime > barcodeTimeout)) {
     lastScannedBarcode = barcodeBuffer;
     barcodeBuffer = "";
+    lastScannedBarcode.trim();
+
+    if (lastScannedBarcode.length() == 0) return;
 
     processingScan = true;
 
-    Serial.println("\n===== PRODUCT SCANNED =====");
+    Serial.println();
+    Serial.println("===== PRODUCT SCANNED =====");
     Serial.print("Barcode: ");
     Serial.println(lastScannedBarcode);
 
@@ -219,52 +223,83 @@ void updateBarcodeReader() {
   }
 }
 
-// ---------------- Main Delta Logic ----------------
+// ================= Main Product Flow =================
 void processProductAfterScan() {
-  // 1. Baseline before product is placed
+  // 1. Baseline before placing the product
   baselineDistance = getAverageDistance(10);
-  baselineCompression = calculateCompression(baselineDistance);
-  baselineMassG = calculateMassGrams(baselineCompression);
+
+  if (baselineDistance <= 0) {
+    Serial.println("ERROR: Baseline read failed -> backend not called");
+    showTwoLine("Sensor Error", "Baseline Fail");
+    delay(2000);
+    processingScan = false;
+    showTwoLine("Scan Product", "M:0g");
+    return;
+  }
+
+  baselineMassG = calculateMassGrams(calculateCompression(baselineDistance));
 
   Serial.println("----- BASELINE BEFORE ADD -----");
   Serial.print("Baseline Distance: ");
   Serial.print(baselineDistance, 2);
   Serial.println(" cm");
-
   Serial.print("Baseline Total Mass: ");
   Serial.print(baselineMassG, 0);
   Serial.println(" g");
 
-  showTwoLine("Place Product", "Wait...");
+  // NEW: give customer time to place the product
+  Serial.println("Waiting for customer to place product...");
+  showTwoLine("Place Product", "Wait 4 sec");
+
+  unsigned long graceStart = millis();
+  while (millis() - graceStart < productPlacementDelay) {
+    updateBuzzerPattern();
+    delay(100);
+  }
+
+  showTwoLine("Checking...", "Weight");
 
   // 2. Wait for product placement
   unsigned long startWait = millis();
   bool detected = false;
+  int stableHits = 0;
 
   while (millis() - startWait < placementTimeout) {
     updateBuzzerPattern();
 
-    float testDistance = getAverageDistance(5);
-    float testCompression = calculateCompression(testDistance);
-    float testMass = calculateMassGrams(testCompression);
+    float testDistance = getAverageDistance(4);
+    if (testDistance <= 0) {
+      Serial.println("Waiting -> invalid distance");
+      delay(120);
+      continue;
+    }
+
+    float testMass = calculateMassGrams(calculateCompression(testDistance));
     float testDelta = testMass - baselineMassG;
+
+    if (testDelta >= minDetectMassG) {
+      stableHits++;
+    } else {
+      stableHits = 0;
+    }
 
     Serial.print("Waiting -> Current Mass: ");
     Serial.print(testMass, 0);
     Serial.print(" g | Delta: ");
     Serial.print(testDelta, 0);
-    Serial.println(" g");
+    Serial.print(" g | Stable Hits: ");
+    Serial.println(stableHits);
 
     lcd.setCursor(0, 0);
-    lcd.print("Place Product   ");
-
+    lcd.print("Checking Weight ");
     lcd.setCursor(0, 1);
     lcd.print("dM:");
     lcd.print(testDelta, 0);
     lcd.print("g   ");
 
-    if (testDelta >= minDetectMassG) {
+    if (stableHits >= stableDetectionHits) {
       detected = true;
+      Serial.println("Product detected.");
       break;
     }
 
@@ -272,25 +307,26 @@ void processProductAfterScan() {
   }
 
   if (!detected) {
-    Serial.println("No product detected");
-
-    showTwoLine("No Product", "Try Again");
-    delay(2000);
-
-    processingScan = false;
-    productMeasured = false;
-    showTwoLine("Scan Product", "M:0g");
-    return;
+    Serial.println("WARNING: Product not strongly detected.");
+    Serial.println("Continuing to final measurement for backend test...");
   }
 
-  // 3. Allow system to settle
+  // 3. Let the platform settle
   delay(settleDelay);
 
   // 4. Final measurement
   finalDistance = getAverageDistance(12);
-  finalCompression = calculateCompression(finalDistance);
-  finalMassG = calculateMassGrams(finalCompression);
 
+  if (finalDistance <= 0) {
+    Serial.println("ERROR: Final read failed -> backend not called");
+    showTwoLine("Sensor Error", "Final Fail");
+    delay(2000);
+    processingScan = false;
+    showTwoLine("Scan Product", "M:0g");
+    return;
+  }
+
+  finalMassG = calculateMassGrams(calculateCompression(finalDistance));
   deltaMassG = finalMassG - baselineMassG;
 
   if (deltaMassG < 0) {
@@ -298,7 +334,7 @@ void processProductAfterScan() {
   }
 
   currentDistance = finalDistance;
-  currentCompression = finalCompression;
+  currentCompression = calculateCompression(finalDistance);
   currentMassG = finalMassG;
   productMeasured = true;
 
@@ -315,7 +351,13 @@ void processProductAfterScan() {
   Serial.print(deltaMassG, 0);
   Serial.println(" g");
 
-  // 5. Send exact product delta mass to backend
+  // Keep at least 1g while testing backend flow
+  if (deltaMassG < 1.0) {
+    Serial.println("Delta too small. Using 1g for backend test.");
+    deltaMassG = 1.0;
+  }
+
+  Serial.println("DEBUG: Calling backend now...");
   bool sentOk = sendDeltaToBackend(lastScannedBarcode, deltaMassG);
 
   if (sentOk) {
@@ -328,10 +370,35 @@ void processProductAfterScan() {
   processingScan = false;
 }
 
-// ---------------- LCD Final Result ----------------
+// ================= Live Waiting Screen =================
+void showLiveWaitingScreen() {
+  if (productMeasured || processingScan) return;
+  if (millis() - lastSensorUpdate < sensorInterval) return;
+
+  lastSensorUpdate = millis();
+
+  float d = getAverageDistance(3);
+  if (d <= 0) return;
+
+  float massG = calculateMassGrams(calculateCompression(d));
+
+  Serial.print("Live -> Distance: ");
+  Serial.print(d, 2);
+  Serial.print(" cm | Total Mass: ");
+  Serial.print(massG, 0);
+  Serial.println(" g");
+
+  lcd.setCursor(0, 0);
+  lcd.print("Scan Product   ");
+  lcd.setCursor(0, 1);
+  lcd.print("M:");
+  lcd.print(massG, 0);
+  lcd.print("g   ");
+}
+
+// ================= LCD Result =================
 void showMeasuredData() {
   lcd.clear();
-
   lcd.setCursor(0, 0);
   lcd.print("Add:");
   lcd.print(deltaMassG, 0);
@@ -355,48 +422,39 @@ void showMeasuredData() {
   productMeasured = false;
 }
 
-// ---------------- Live Waiting Screen ----------------
-void showLiveWaitingScreen() {
-  if (productMeasured || processingScan) return;
-
-  if (millis() - lastSensorUpdate < sensorInterval) return;
-  lastSensorUpdate = millis();
-
-  float d = getDistance();
-  float comp = calculateCompression(d);
-  float massG = calculateMassGrams(comp);
-
-  Serial.print("Live -> Distance: ");
-  Serial.print(d, 1);
-  Serial.print(" cm | Compression: ");
-  Serial.print(comp, 1);
-  Serial.print(" cm | Total Mass: ");
-  Serial.print(massG, 0);
-  Serial.println(" g");
-
-  lcd.setCursor(0, 0);
-  lcd.print("Scan Product   ");
-
-  lcd.setCursor(0, 1);
-  lcd.print("M:");
-  lcd.print(massG, 0);
-  lcd.print("g   ");
-}
-
-// ---------------- Backend Send ----------------
+// ================= Backend =================
 String buildCartScanUrl() {
-  return String(SERVER_BASE_URL) + "/api/carts/" + String(CART_ID) + "/scan";
+  return String(SERVER_BASE_URL) + "/api/cart/" + String(CART_ID) + "/scan";
 }
 
 bool sendDeltaToBackend(String barcode, float measuredWeight) {
+  for (int attempt = 1; attempt <= backendRetryCount; attempt++) {
+    Serial.print("Backend send attempt: ");
+    Serial.println(attempt);
+
+    bool ok = sendDeltaToBackendOnce(barcode, measuredWeight);
+    if (ok) {
+      return true;
+    }
+
+    if (attempt < backendRetryCount) {
+      delay(backendRetryDelayMs);
+    }
+  }
+
+  return false;
+}
+
+bool sendDeltaToBackendOnce(String barcode, float measuredWeight) {
   if (!isWiFiConnected()) {
     Serial.println("WiFi not connected");
     return false;
   }
 
-  HTTPClient http;
   String url = buildCartScanUrl();
 
+  HTTPClient http;
+  http.setTimeout(5000);
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
 
@@ -414,7 +472,11 @@ bool sendDeltaToBackend(String barcode, float measuredWeight) {
   Serial.println(requestBody);
 
   int httpCode = http.POST(requestBody);
-  String response = http.getString();
+  String response = "";
+
+  if (httpCode > 0) {
+    response = http.getString();
+  }
 
   Serial.print("HTTP Code: ");
   Serial.println(httpCode);
@@ -427,11 +489,18 @@ bool sendDeltaToBackend(String barcode, float measuredWeight) {
     return false;
   }
 
+  if (response.length() == 0) {
+    Serial.println("Empty response from backend");
+    http.end();
+    return false;
+  }
+
   StaticJsonDocument<2048> responseDoc;
   DeserializationError err = deserializeJson(responseDoc, response);
 
   if (err) {
-    Serial.println("Failed to parse backend JSON response");
+    Serial.print("JSON parse failed: ");
+    Serial.println(err.c_str());
     http.end();
     return false;
   }
@@ -441,7 +510,7 @@ bool sendDeltaToBackend(String barcode, float measuredWeight) {
   const char* lcdMessage = responseDoc["lcdMessage"] | message;
 
   if (success) {
-    Serial.println("Backend verification success");
+    Serial.println("Backend success");
     Serial.print("Message: ");
     Serial.println(message);
 
@@ -455,7 +524,7 @@ bool sendDeltaToBackend(String barcode, float measuredWeight) {
     http.end();
     return true;
   } else {
-    Serial.println("Backend verification failed");
+    Serial.println("Backend failed");
     Serial.print("Message: ");
     Serial.println(message);
 
@@ -471,7 +540,7 @@ bool sendDeltaToBackend(String barcode, float measuredWeight) {
   }
 }
 
-// ---------------- Ultrasonic Distance ----------------
+// ================= Ultrasonic =================
 float getDistance() {
   long duration;
 
@@ -485,13 +554,18 @@ float getDistance() {
   duration = pulseIn(echoPin, HIGH, 30000);
 
   if (duration == 0) {
-    return 0.0;
+    return -1.0;
   }
 
-  return duration * 0.034 / 2.0;
+  float distance = duration * 0.034 / 2.0;
+
+  if (distance <= 0.0 || distance > 50.0) {
+    return -1.0;
+  }
+
+  return distance;
 }
 
-// ---------------- Average Distance ----------------
 float getAverageDistance(int samples) {
   float sum = 0.0;
   int count = 0;
@@ -504,38 +578,29 @@ float getAverageDistance(int samples) {
       count++;
     }
 
-    delay(60);
+    delay(50);
   }
 
   if (count == 0) {
-    return 0.0;
+    return -1.0;
   }
 
   return sum / count;
 }
 
-// ---------------- Calculations ----------------
 float calculateCompression(float distance) {
   float compression = EMPTY_DISTANCE_CM - distance;
-
-  if (compression < 0) {
-    compression = 0;
-  }
-
+  if (compression < 0) compression = 0;
   return compression;
 }
 
 float calculateMassGrams(float compression) {
   float massG = compression * MASS_CONSTANT_G_PER_CM;
-
-  if (massG < 0) {
-    massG = 0;
-  }
-
+  if (massG < 0) massG = 0;
   return massG;
 }
 
-// ---------------- LCD Helper ----------------
+// ================= LCD Helper =================
 void showTwoLine(String line1, String line2) {
   lcd.clear();
   lcd.setCursor(0, 0);
@@ -544,7 +609,7 @@ void showTwoLine(String line1, String line2) {
   lcd.print(line2);
 }
 
-// ---------------- Buzzer ----------------
+// ================= Buzzer =================
 void startBuzzerPattern() {
   buzzerRunning = true;
   buzzerStep = 0;

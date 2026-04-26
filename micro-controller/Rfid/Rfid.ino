@@ -3,9 +3,9 @@
 #include <SPI.h>
 #include <MFRC522.h>
 
-const char* ssid = "######"; 
-const char* password = "#####"; 
-const char* serverUrl = "#####";
+const char* ssid = "Madhuka iPhone"; 
+const char* password = "madhuka123"; 
+const char* serverUrl = "http://172.20.10.4:8787";
 
 #define SS_PIN 21
 #define RST_PIN 22
@@ -48,32 +48,34 @@ void loop() {
   Serial.println("Scanned UID: " + uidStr);
 
   // Send to backend
-  if (WiFi.status() == WL_CONNECTED) {
+ if (WiFi.status() == WL_CONNECTED) {
     HTTPClient http;
-    http.begin(serverUrl);
+
+    // Build correct URL with RFID
+    String fullUrl = String(serverUrl) + "/api/cart/rfid/" + uidStr;
+    Serial.println("Request URL: " + fullUrl);
+
+    http.begin(fullUrl);
     http.addHeader("Content-Type", "application/json");
 
-    String payload = "{\"rfid_code\":\"" + uidStr + "\"}";
-    Serial.println("Payload: " + payload);
-
-    int httpResponseCode = http.POST(payload);
+    int httpResponseCode = http.GET();   // 👈 CHANGE POST → GET
 
     Serial.print("HTTP Response code: ");
     Serial.println(httpResponseCode);
 
     if (httpResponseCode > 0) {
-      String response = http.getString();
-      Serial.println("Server Response: " + response);
+        String response = http.getString();
+        Serial.println("Server Response: " + response);
     } else {
-      Serial.println("Error sending POST");
+        Serial.println("Error sending request");
     }
 
     http.end();
-  } else {
+} else {
     Serial.println("WiFi not connected");
-  }
+}
 
-  rfid.PICC_HaltA();
-  rfid.PCD_StopCrypto1();
-  delay(3000);
+rfid.PICC_HaltA();
+rfid.PCD_StopCrypto1();
+delay(3000);
 }
